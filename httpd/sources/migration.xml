@@ -1,0 +1,956 @@
+<?xml version='1.0'?> <!-- -*- text -*- -->
+
+<!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.1.2//EN"
+  "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd" [
+
+<!ENTITY httpd "<literal>httpd</literal>">
+<!ENTITY httpdconf "<filename>httpd.conf</filename>">
+<!ENTITY mod_ssl "<literal>mod_ssl</literal>">
+<!ENTITY mod_proxy "<literal>mod_proxy</literal>">
+<!ENTITY mod_include "<literal>mod_include</literal>">
+<!ENTITY mod_auth_db "<literal>mod_auth_db</literal>">
+<!ENTITY mod_auth_dbm "<literal>mod_auth_dbm</literal>">
+<!ENTITY mod_perl "<literal>mod_perl</literal>">
+<!ENTITY mod_python "<literal>mod_python</literal>">
+
+<!ENTITY htdbm "<command>htdbm</command>">
+<!ENTITY dbmmanage "<command>dbmmanage</command>">
+
+<!ENTITY distro "@DISTRO@">
+
+<!ENTITY prefork "<emphasis>prefork</emphasis>">
+<!ENTITY worker "<emphasis>worker</emphasis>">
+
+]>
+
+<article>
+
+<articleinfo>
+<title>Apache Migration HOWTO</title>
+
+<abstract>
+
+<para>This HOWTO covers the migration of &distro; web servers from
+Apache 1.3 packages to Apache 2.0 packages.  It
+explains the relevant differences between the 1.3 and 2.0 packages,
+and describes the process required to migrate your server's
+configuration from 1.3 to 2.0.</para>
+
+</abstract>
+</articleinfo>
+
+<sect1>
+<title>Naming and filesystem changes</title>
+
+<sect2>
+<title>Packaging changes</title>
+
+<para>When using RPM to administer your system you should be aware
+that some packages have been renamed, some have been incorporated into
+others, and some have been deprecated.  The major changes are that the
+<literal>apache</literal>, <literal>apache-devel</literal> and
+<literal>apache-manual</literal> packages have been renamed as
+&httpd;, <literal>httpd-devel</literal> and
+<literal>httpd-manual</literal>, and that the
+<literal>mod_dav</literal> package has been incorporated into the
+&httpd; package.</para>
+
+<para>A complete breakdown of the packaging changes can be found in
+<xref linkend="pkgchanges"/>.</para>
+
+</sect2>
+
+<sect2>
+<title>Filesystem changes</title>
+
+<para>The single major change to the filesystem layout is that there
+is now a directory, <filename>/etc/httpd/conf.d</filename>, into which
+the configuration files for individually packaged modules (&mod_ssl;,
+<literal>php</literal>, &mod_perl; and so on) are placed.  The server
+is instructed to load configuration files from this location by the
+directive <literal>Include conf.d/*.conf</literal> within
+<filename>/etc/httpd/conf/httpd.conf</filename>, so it is vital that
+this line be inserted when migrating an existing configuration.</para>
+
+<para>Of the many minor changes, the most important to be aware of are
+that the utility programs <command>ab</command> and
+<command>logresolve</command> have been moved from
+<filename>/usr/sbin</filename> to <filename>/usr/bin</filename>, which
+will cause scripts with absolute paths to these binaries to fail; the
+&dbmmanage; command has been replaced by &htdbm; (see <xref
+linkend="mod_auth_dbm"/>); the logrotate configuration file has been
+renamed from <filename>/etc/logrotate.d/apache</filename> to
+<filename>/etc/logrotate.d/httpd</filename>.</para>
+
+</sect2>
+</sect1>
+
+<sect1>
+<title>Migrating your configuration</title>
+
+<para>If you have upgraded your server from a previous version of 
+&distro; upon which Apache was installed then the stock configuration
+file from the Apache 2.0 package will have been created as
+<filename>/etc/httpd/conf/httpd.conf.rpmnew</filename>, leaving your
+original &httpdconf; untouched.  It is, of course, entirely up to you
+whether you use the new configuration file and migrate your old
+settings to it, or use your existing file as a base and modify it to
+suit, however some parts of the file have changed more than others and
+a mixed approach is generally the best.  The stock configuration files
+for both 1.3 and 2.0 are divided into three sections, and for each of
+these this document will suggest what is hopefully the easiest
+route.</para>
+
+<para>If your &httpdconf; has been modified from the default configuration
+and you have saved a copy of the original then you may find the
+<command>diff</command> command comes in handy.  Invoked as:
+
+<informalexample>
+<programlisting>
+diff -u httpd.conf.orig httpd.conf | less
+</programlisting>
+</informalexample>
+
+for example, it will highlight the modifications you have made.  If
+you do not have a copy of the original file all is not lost, since it
+is possible to extract it from an RPM package using the
+<command>rpm2cpio</command> and <command>cpio</command> commands, for
+example:
+
+<informalexample>
+<programlisting>
+rpm2cpio apache-1.3.23-11.i386.rpm | cpio -i --make
+</programlisting>
+</informalexample>
+
+Finally, it is useful to know that Apache has a testing mode to check
+your configuration for errors.  This may be invoked as:
+
+<informalexample>
+<programlisting>
+apachectl configtest
+</programlisting>
+</informalexample>
+</para>
+
+<sect2>
+<title>Global Environment</title>
+
+<para>The global environment section of the configuration file
+contains directives which affect the overall operation of Apache, such
+as the number of concurrent requests it can handle and the locations of
+the various files it uses.  This section requires a large number of
+changes compared with the others and it is therefore recommended that
+you base this section on the Apache 2.0 configuration file and migrate
+your old settings into it.</para>
+
+<sect3>
+<title>Selecting which interfaces and ports to bind to</title>
+
+<para>The <literal>BindAddress</literal> and <literal>Port</literal>
+directives no longer exist: their functionality is now provided by a
+more flexible <literal>Listen</literal> directive.</para>
+
+<para>If you had set <literal>Port 80</literal> you should change it
+to <literal>Listen 80</literal> instead.  If you had set
+<literal>Port</literal> to some other value then you should also
+append the port number to the contents of your
+<literal>ServerName</literal> directive:</para>
+
+<example>
+<title>Apache 1.3 port configuration</title>
+<programlisting>
+Port 123
+ServerName www.example.com
+</programlisting>
+</example>
+<example>
+<title>Equivalent Apache 2.0 port configuration</title>
+<programlisting>
+<emphasis role="bold">Listen</emphasis> 123
+ServerName www.example.com<emphasis role="bold">:123</emphasis>
+</programlisting>
+</example>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mpm_common.html#listen"><literal>Listen</literal></ulink></simpara></listitem>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/core.html#servername"><literal>ServerName</literal></ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3>
+<title>Server-pool size regulation</title>
+
+<para>In Apache 2.0, the responsibility for accepting requests and
+dispatching children to handle them has been abstracted into a group
+of modules called Multi-Processing Modules (MPMs); the original Apache
+1.3 behaviour has now been moved into the &prefork; MPM.</para>
+
+<para>The MPM used by default on &distro; is &prefork; which
+accepts the same directives (<literal>StartServers</literal>,
+<literal>MinSpareServers</literal>,
+<literal>MaxSpareServers</literal>, <literal>MaxClients</literal> and
+<literal>MaxRequestsPerChild</literal>) as Apache 1.3 and as such the
+values of these directives may be migrated across directly.</para>
+
+<para>An alternative, thread-based MPM called &worker; is also available;
+to use this MPM, add the line:
+
+<informalexample>
+<programlisting>
+HTTPD=/usr/sbin/httpd.worker
+</programlisting>
+</informalexample>
+
+to the file <filename>/etc/sysconfig/httpd</filename>.</para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mpm.html">Apache
+Multi-Processing Modules</ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3 id="dsosupport">
+<title>Dynamic Shared Object (DSO) Support</title>
+
+<para>There are many changes required here and it is highly
+recommended that anyone trying to modify an Apache 1.3 configuration
+to suit Apache 2.0 (as opposed to migrating your changes into the
+Apache 2.0 configuration) simply copy this section from the stock 
+&distro; Apache 2.0 configuration.  If you do decide to try and
+modify your original file, please note that it is of paramount
+importance that your &httpdconf; contains the following directive:
+
+<informalexample>
+<programlisting>
+#
+# Load config files from the config directory "/etc/httpd/conf.d".
+#
+Include conf.d/*.conf
+</programlisting>
+</informalexample>
+
+Omission of this directive will result in the failure of all modules
+packaged in their own RPMs (&mod_ssl;, <literal>php</literal>,
+&mod_perl; and the like).</para>
+
+<para>Those who still don't want to simply copy the section from the
+stock Apache 2.0 configuration should note the following:</para>
+
+<itemizedlist>
+
+<listitem><para>The <literal>AddModule</literal> and
+<literal>ClearModuleList</literal> directives no longer exist. These
+directives where used to ensure that modules could be enabled in the
+correct order. The new Apache 2.0 API allows modules to explicitly
+specify their ordering, eliminating the need for these
+directives.</para></listitem>
+
+<listitem><para>The order of the <literal>LoadModule</literal> lines
+is thus no longer relevant.</para></listitem>
+
+<listitem><para>Many modules have been added, removed, renamed, split
+up, or incorporated with each other.</para></listitem>
+
+<listitem><para><literal>LoadModule</literal> lines for modules
+packaged in their own RPMs (&mod_ssl;, <literal>php</literal>,
+&mod_perl; and the like) are no longer necessary as they can be found
+in the relevant file in the directory
+<filename>/etc/httpd/conf.d</filename>.</para></listitem>
+
+<listitem><para>The various <literal>HAVE_XXX</literal> definitions
+are no longer defined.</para></listitem>
+
+</itemizedlist>
+
+</sect3>
+
+<sect3>
+<title>Other changes</title>
+
+<para>The <literal>ServerType</literal> directive has been removed in
+Apache 2.0 which can only be run as <literal>ServerType
+standalone</literal>.</para>
+
+<para>The <literal>AccessConfig</literal> and
+<literal>ResourceConfig</literal> directives have been removed since
+they mirror the functionality of the <literal>Include</literal>
+directive.  If you have <literal>AccessConfig</literal> and
+<literal>ResourceConfig</literal> directives set then you need to
+replace these with <literal>Include</literal> directives.  To ensure
+that the files are read in the order implied by the older directives
+the <literal>Include</literal> directives should be placed at the end
+of &httpdconf;, with the one corresponding to
+<literal>ResourceConfig</literal> preceding the one corresponding to
+<literal>AccessConfig</literal>.  If you were making use of the
+default values you will need to include them explicitly as
+<filename>conf/srm.conf</filename> and
+<filename>conf/access.conf</filename>.</para>
+
+</sect3>
+</sect2>
+
+<sect2 id="mainserverconfig">
+<title>Main server configuration</title>
+
+<para>The main server configuration section of the configuration file
+sets up the main server, which responds to any requests that aren't
+handled by a <literal>&lt;VirtualHost&gt;</literal> definition.
+Values here also provide defaults for any
+<literal>&lt;VirtualHost&gt;</literal> containers you may
+define.</para>
+
+<para>The directives used in this section have changed little between
+Apache 1.3 and Apache 2.0, so if your main server configuration is
+heavily customised you may find it easier to modify your existing
+configuration to suit Apache 2.0.  Users with only lightly customised
+main server sections are recommended to migrate their changes into the
+stock Apache 2.0 configuration.</para>
+
+<sect3>
+<title>UserDir mapping</title>
+
+<para>The <literal>UserDir</literal> directive is used to enable URLs
+such as <filename>http://example.com/~jim/</filename> to map to a
+directory in the home directory of the user <literal>jim</literal>,
+such as <filename>/home/jim/public_html</filename>.  A side-effect of
+this feature allows a potential attacker to determine whether a given
+username is present on the system, so the default configuration for
+Apache 2.0 does not enable <literal>UserDir</literal>.</para>
+
+<para>To enable <literal>UserDir</literal> mapping, change the
+directive: 
+<informalexample>
+<programlisting>
+UserDir disable
+</programlisting>
+</informalexample> 
+to
+<informalexample>
+<programlisting>
+UserDir public_html
+</programlisting>
+</informalexample> 
+in <filename>/etc/httpd/conf/httpd.conf</filename>.</para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_userdir.html#userdir"><literal>UserDir</literal></ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3>
+<title>Logging</title>
+
+<para>The <literal>AgentLog</literal>, <literal>RefererLog</literal>
+and <literal>RefererIgnore</literal> directives have been removed.
+Agent and referrer logs are still available using the
+<literal>CustomLog</literal> and <literal>LogFormat</literal>
+directives.</para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_log_config.html#customlog"><literal>CustomLog</literal></ulink></simpara></listitem>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_log_config.html#logformat"><literal>LogFormat</literal></ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3>
+<title>Directory Indexing</title>
+
+<para>The deprecated <literal>FancyIndexing</literal> directive has
+now been removed. The same functionality is available through the
+<literal>FancyIndexing</literal> option to the
+<literal>IndexOptions</literal> directive.</para>
+
+<para>The new <literal>VersionSort</literal> option to the
+<literal>IndexOptions</literal> directive causes files containing
+version numbers to be sorted in the natural way, so that
+<filename>apache-1.3.9.tar</filename> would appear before
+<filename>apache-1.3.12.tar</filename> in a directory index page.</para>
+
+<para>The defaults for the <literal>ReadmeName</literal> and
+<literal>HeaderName</literal> directives have changed from
+<filename>README</filename> and <filename>HEADER</filename> to
+<filename>README.html</filename> and
+<filename>HEADER.html</filename>.</para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_autoindex.html#indexoptions"><literal>IndexOptions</literal></ulink></simpara></listitem>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_autoindex.html#readmename"><literal>ReadmeName</literal></ulink></simpara></listitem>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_autoindex.html#headername"><literal>HeaderName</literal></ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3>
+<title>Content Negotiation</title>
+
+<para>The <literal>CacheNegotiatedDocs</literal> directive now takes
+the argument: on or off. Existing instances of
+<literal>CacheNegotiatedDocs</literal> should be replaced with
+<literal>CacheNegotiatedDocs on</literal>.</para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_negotiation.html#cachenegotiateddocs"><literal>CacheNegotiatedDocs</literal></ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3>
+<title>Error Documents</title>
+
+<para>To use a hard-coded message with the
+<literal>ErrorDocument</literal> directive, the message should be
+enclosed in a pair of double quotes, rather than just preceded by a
+double quote as required in Apache 1.3.  For instance, change:
+
+<informalexample>
+<programlisting>
+ErrorDocument 404 "The document was not found
+</programlisting>
+</informalexample> 
+to
+<informalexample>
+<!-- " character might not come out in bold depending on font, oh well -->
+<programlisting>
+ErrorDocument 404 "The document was not found<emphasis role="bold">&quot;</emphasis>
+</programlisting>
+</informalexample>
+
+</para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/core.html#errordocument"><literal>ErrorDocument</literal></ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3>
+<title>Default Character Set</title>
+
+<para>The default character set which will be sent in a
+<literal>Content-Type</literal> header has changed from previous
+versions.  By default, the configuration in &distro; uses a UTF-8
+locale, the default character set used in &httpdconf; is now
+<literal>utf-8</literal>, rather than the previous default of
+<literal>ISO-8859-1</literal>.</para>
+
+<para>To configure the server to use a default character set of
+ISO-8859-1 if migrating non-UTF-8 content, change:
+
+<informalexample>
+<programlisting>
+AddDefaultCharset utf-8
+</programlisting>
+</informalexample> 
+
+to
+
+<informalexample>
+<programlisting>
+AddDefaultCharset <emphasis role="bold">ISO-8859-1</emphasis>
+</programlisting>
+</informalexample></para>
+
+</sect3>
+</sect2>
+
+<sect2>
+<title>Virtual Hosts</title>
+
+<para>The contents of all <literal>&lt;VirtualHost&gt;</literal>
+containers should be migrated in the same way as the main server
+section as described in <xref linkend="mainserverconfig"/>.  Note that
+the SSL virtual host context has been moved into the file
+<filename>/etc/httpd/conf.d/ssl.conf</filename>.</para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink url="http://httpd.apache.org/docs-2.0/vhosts/">Apache
+Virtual Host Documentation</ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect2>
+
+<sect2 id="modules">
+<title>Modules</title>
+
+<para>In Apache 2.0 the module system has been changed to allow
+modules to be chained together to combine them in new and interesting
+ways.  CGI scripts, for example, can generate server-parsed HTML
+documents which can then be processed by &mod_include;.  The
+possibilities are only limited by the bounds of your
+imagination.</para>
+
+<para>The way this actually works is that each request is served by
+exactly one <emphasis>handler</emphasis> module followed by zero or
+more <emphasis>filter</emphasis> modules.  Under Apache 1.3, for
+example, a PHP script would be handled entirely by the PHP
+module; under Apache 2.0 the request is initially
+<emphasis>handled</emphasis> by the core module (which serves static
+files) and subsequently <emphasis>filtered</emphasis> by the PHP
+module.</para>
+
+<para>Exactly how to use this (and all the other new features of
+Apache 2.0 for that matter) is beyond the scope of this document,
+however the change has ramifications if you have used PATH_INFO
+(trailing path information after the true filename) in a document
+which is handled by a module that is now implemented as a filter.  The
+core module, which initially handles the request, does not by default
+understand PATH_INFO and will serve 404 Not Found errors for requests
+that have it.  The <literal>AcceptPathInfo</literal> directive can be
+used to coerce the core module into accepting requests with PATH_INFO:
+
+<informalexample>
+<programlisting>
+AcceptPathInfo on
+</programlisting>
+</informalexample> 
+
+</para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/core.html#acceptpathinfo"><literal>AcceptPathInfo</literal></ulink></simpara></listitem>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/handler.html">Apache's
+Handler Use</ulink></simpara></listitem>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/filter.html">Filters</ulink></simpara></listitem>
+
+</itemizedlist></para>
+
+<sect3>
+<title>mod_ssl</title>
+
+<para>The configuration for &mod_ssl; has been moved from &httpdconf;
+into the file <filename>/etc/httpd/conf.d/ssl.conf</filename>.  For
+this file to be loaded, and hence for &mod_ssl; to work, you must have
+the statement <literal>Include conf.d/*.conf</literal> in your
+&httpdconf; as described in <xref linkend="dsosupport"/>.</para>
+
+<para><literal>ServerName</literal> directives in SSL virtual hosts
+must explicitly specify the port number:</para>
+
+<example>
+<title>Apache 1.3 SSL virtual host configuration</title>
+<programlisting>
+##
+## SSL Virtual Host Context
+##
+
+&lt;VirtualHost _default_:443&gt;
+    # General setup for the virtual host
+    ServerName ssl.host.name
+    ...
+&lt;/VirtualHost&gt;
+</programlisting>
+</example>
+<example>
+<title>Equivalent Apache 2.0 SSL virtual host configuration</title>
+<programlisting>
+##
+## SSL Virtual Host Context
+##
+
+&lt;VirtualHost _default_:443&gt;
+    # General setup for the virtual host
+    ServerName ssl.host.name<emphasis role="bold">:443</emphasis>
+    ...
+&lt;/VirtualHost&gt;
+</programlisting>
+</example>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_ssl.html">Apache
+Module mod_ssl</ulink></simpara></listitem>
+
+<listitem><simpara><ulink url="http://httpd.apache.org/docs-2.0/vhosts/">Apache
+Virtual Host Documentation</ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3>
+<title>mod_proxy</title>
+
+<para>Proxy access control statements are now placed inside a
+<literal>&lt;Proxy&gt;</literal> block rather than a
+<literal>&lt;Directory proxy:&gt;</literal>.</para>
+
+<para>The caching functionality of the old &mod_proxy; has been split
+out into three other modules (<literal>mod_cache</literal>,
+<literal>mod_disk_cache</literal>, <literal>mod_file_cache</literal>),
+although these generally use the same or similar directives as the old
+&mod_proxy;.</para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_proxy.html">Apache
+Module mod_proxy</ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3>
+<title>mod_include</title>
+
+<para>&mod_include; is now implemented as a <link
+linkend="modules">filter</link> and must therefore be enabled
+differently:</para>
+
+<example>
+<title>Apache 1.3 &mod_include; configuration</title>
+<programlisting>
+AddType text/html .shtml
+AddHandler server-parsed .shtml
+</programlisting>
+</example>
+
+<example>
+<title>Equivalent Apache 2.0 &mod_include; configuration</title>
+<programlisting>
+AddOutputFilter INCLUDES .shtml
+</programlisting>
+</example>
+
+<para>Note that <literal>Options +Includes</literal> is still
+required.</para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_include.html">Apache
+Module mod_include</ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3 id="mod_auth_dbm">
+<title>mod_auth_dbm and mod_auth_db</title>
+
+<para>Apache 1.3 supported two authentication modules, &mod_auth_db;
+and &mod_auth_dbm;, which used Berkeley Databases and DBM databases
+respectively.  These modules have been combined into a single module
+named &mod_auth_dbm; in Apache 2.0, which can access several different
+database formats.  To migrate from &mod_auth_db; in Apache 1.3,
+configuration files should be adjusted by replacing
+<literal>AuthDBUserFile</literal> and
+<literal>AuthDBGroupFile</literal> with the &mod_auth_dbm; equivalents
+<literal>AuthDBMUserFile</literal> and
+<literal>AuthDBMGroupFile</literal>, and the directive
+<literal>AuthDBMType DB</literal> should be added to indicate the type
+of database file in use.</para>
+
+<para><xref linkend="authex1"/> shows a sample &mod_auth_db;
+configuration for Apache 1.3, and <xref linkend="authex2"/> shows how
+it would be migrated to Apache 2.0.  Note that the
+<literal>AuthDBUserFile</literal> directive can also be used in
+<filename>.htaccess</filename> files.</para>
+
+<example id="authex1">
+<title>Apache 1.3 &mod_auth_db; configuration</title>
+<programlisting>
+&lt;Location /private/>
+  AuthType Basic
+  AuthName "My Private Files"
+  AuthDBUserFile /var/www/authdb
+  require valid-user
+&lt;/Location>
+</programlisting>
+</example>
+
+<example id="authex2">
+<title>Equivalent Apache 2.0 &mod_auth_dbm; configuration</title>
+<programlisting>
+&lt;Location /private/>
+  AuthType Basic
+  AuthName "My Private Files"
+  <emphasis role="bold">AuthDBMUserFile /var/www/authdb
+  AuthDBMType DB</emphasis>
+  require valid-user
+&lt;/Location>
+</programlisting>
+</example>
+
+<para>The &dbmmanage; Perl script, used to manipulate
+username/password databases, has been replaced by the &htdbm; program
+in Apache 2.0.  &htdbm; offers equivalent functionality, and like
+&mod_auth_dbm; can operate a variety of database formats; a
+<literal>-T</literal> argument can be used to specify the format to
+use for a particular command.  <xref linkend="htdbm"/> shows how to
+migrate from using &dbmmanage; on a DBM-format database with Apache
+1.3, to &htdbm; in 2.0.</para>
+
+<table id="htdbm" frame="all">
+
+<title>Migrating from &dbmmanage; to &htdbm;</title>
+
+<tgroup cols="3">
+
+<thead><row>
+<entry>Action</entry>
+<entry>dbmmanage command (Apache 1.3)</entry>
+<entry>Equivalent htdbm command (Apache 2.0)</entry>
+</row></thead>
+
+<!-- using literal's here not commands since commands come out bold
+     and the table looks a bit ugly -->
+
+<tbody>
+<row>
+<entry>Add user to database (using given password)</entry>
+<entry><literal>dbmmanage authdb add username password</literal></entry>
+<entry><literal>htdbm -b -TDB authdb username password</literal></entry>
+</row>
+<row>
+<entry>Add user to database (prompts for password)</entry>
+<entry><literal>dbmmanage authdb adduser username</literal></entry>
+<entry><literal>htdbm -TDB authdb username</literal></entry>
+</row>
+<row>
+<entry>Remove user from database</entry>
+<entry><literal>dbmmanage authdb delete username</literal></entry>
+<entry><literal>htdbm -x -TDB authdb username</literal></entry>
+</row>
+<row>
+<entry>List users in database</entry>
+<entry><literal>dbmmanage authdb view</literal></entry>
+<entry><literal>htdbm -l -TDB authdb</literal></entry>
+</row>
+<row>
+<entry>Verify a password</entry>
+<entry><literal>dbmmanage authdb check username</literal></entry>
+<entry><literal>htdbm -v -TDB authdb username</literal></entry>
+</row>
+
+</tbody></tgroup>
+</table>
+
+<para>The <literal>-m</literal> and <literal>-s</literal> options work
+with both &dbmmanage; and &htdbm; (enabling the use of the MD5 or SHA1
+algorithms for hashing passwords, respectively).  When creating a new
+database with &htdbm;, the <literal>-c</literal> option must be
+used.</para>
+
+<!--
+   * migrating from DBM to DBM
+-->
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://httpd.apache.org/docs-2.0/mod/mod_auth_dbm.html">Apache
+Module mod_auth_dbm</ulink></simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3>
+<title>PHP</title>
+
+<para>The configuration for PHP has been moved from &httpdconf; into
+the file <filename>/etc/httpd/conf.d/php.conf</filename>.  For this
+file to be loaded, and hence for PHP to work, you must have the
+statement <literal>Include conf.d/*.conf</literal> in your &httpdconf;
+as described in <xref linkend="dsosupport"/>.</para>
+
+<para>In PHP 4.2.0 and later the default set of predefined variables
+which are available in the global scope has changed. Individual input
+and server variables are by default no longer placed directly into the
+global scope; rather, they are placed into a number superglobal
+arrays.  This change may cause scripts to break, and you may revert to
+the old behaviour globally by setting
+<literal>register_globals</literal> to <literal>On</literal> in the
+file <filename>/etc/php.ini</filename> or more selectivly by using
+<literal>php_value register_globals 1</literal> in your &httpdconf; or
+in <filename>.htaccess</filename> files.</para>
+
+<para>As of the <literal>php-4.3.6-5</literal> package, the default
+<filename>/etc/php.ini</filename> has also changed: it is now based on
+the <filename>php.ini-recommended</filename> defaults included in PHP
+releases, rather than the <filename>php.ini-dist</filename> defaults
+as used previously.  Notable differences are that:
+
+<itemizedlist>
+<listitem><simpara>display_errors is now <emphasis>Off</emphasis></simpara></listitem>
+<listitem><simpara>log_errors now <emphasis>On</emphasis></simpara></listitem>
+<listitem><simpara>magic_quotes_gpc is now <emphasis>Off</emphasis></simpara></listitem>
+</itemizedlist></para>
+
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="http://www.php.net/release_4_1_0.php">PHP 4.1.0 Release
+Announcement</ulink> for details of the global scope changes</simpara></listitem>
+
+</itemizedlist></para>
+</sect3>
+
+<sect3>
+<title>mod_perl</title>
+
+<para>The configuration for &mod_perl; has been moved from &httpdconf;
+into the file <filename>/etc/httpd/conf.d/perl.conf</filename>.  For
+this file to be loaded, and hence for &mod_perl; to work, you must
+have the statement <literal>Include conf.d/*.conf</literal> in your
+&httpdconf; as described in <xref linkend="dsosupport"/>.</para>
+
+<para>Occurances of <literal>Apache::</literal> in your &httpdconf;
+must be replaced with <literal>ModPerl::</literal>.  Additionally, the
+manner in which handlers are registered has been changed, for
+example:</para>
+
+<example>
+<title>Apache 1.3 &mod_perl; configuration</title>
+<programlisting>
+&lt;Directory /var/www/perl&gt;
+    SetHandler perl-script
+    PerlHandler Apache::Registry
+    Options +ExecCGI
+&lt;/Directory&gt;
+</programlisting>
+</example>
+
+<example>
+<title>Equivalent Apache 2.0 &mod_perl; configuration</title>
+<programlisting>
+&lt;Directory /var/www/perl&gt;
+    SetHandler perl-script
+    <emphasis role="bold">PerlResponseHandler ModPerl::Registry</emphasis>
+    Options +ExecCGI
+&lt;/Directory&gt;
+</programlisting>
+</example>
+
+<para>Most modules for &mod_perl; 1.x should work without modification
+with &mod_perl; 2.x.  XS modules will require recompilation and may
+possibly require minor Makefile modifications.</para>
+
+<!--
+<para>See also:
+<itemizedlist>
+
+<listitem><simpara><ulink
+url="XXX_not_on_the_web">mod_perl: porting from 1.x</ulink></simpara></listitem>
+
+</itemizedlist></para>
+-->
+
+</sect3>
+
+<sect3>
+<title>mod_python</title>
+
+<para>The configuration for &mod_python; has been moved from &httpdconf;
+into the file <filename>/etc/httpd/conf.d/python.conf</filename>.  For
+this file to be loaded, and hence for &mod_python; to work, you must
+have the statement <literal>Include conf.d/*.conf</literal> in your
+&httpdconf; as described in <xref linkend="dsosupport"/>.</para>
+
+</sect3>
+
+<sect3>
+<title>suexec</title>
+
+<para>In Apache 2.0, suexec is configured using the new
+<literal>SuexecUserGroup</literal> directive rather than 
+<literal>User</literal> and <literal>Group</literal>.</para>
+
+<example>
+<title>Apache 1.3 suexec configuration</title>
+<programlisting>
+&lt;VirtualHost vhost.example.com:80&gt;
+    User someone
+    Group somegroup
+&lt;/VirtualHost&gt;
+</programlisting>
+</example>
+
+<example>
+<title>Equivalent Apache 2.0 suexec configuration</title>
+<programlisting>
+&lt;VirtualHost vhost.example.com:80&gt;
+    SuexecUserGroup someone somegroup
+&lt;/VirtualHost&gt;
+</programlisting>
+</example>
+</sect3>
+</sect2>
+</sect1>
+
+<appendix id="pkgchanges">
+<title>Packaging Changes</title>
+
+<itemizedlist>
+
+<listitem><simpara>The <literal>apache</literal>,
+<literal>apache-devel</literal> and <literal>apache-manual</literal>
+packages have been renamed as &httpd;, <literal>httpd-devel</literal>
+and <literal>httpd-manual</literal>.</simpara></listitem>
+
+<listitem><simpara>The <literal>mod_dav</literal> package has been
+incorporated into the &httpd; package.</simpara></listitem>
+
+<listitem><simpara>The <literal>mod_put</literal> and
+<literal>mod_roaming</literal> packages have been removed, since their
+functionality is a subset of that provided by
+<literal>mod_dav</literal>.</simpara></listitem>
+
+<listitem><simpara>The <literal>mod_auth_any</literal> and
+<literal>mod_bandwidth</literal> packages have been
+removed.</simpara></listitem>
+
+<listitem><simpara>&mod_ssl;'s version is now synchronised with &httpd;,
+which means that the &mod_ssl; package for Apache 2.0 has a lower
+version than &mod_ssl; package for 1.3.</simpara></listitem>
+
+</itemizedlist>
+
+</appendix>
+
+</article>

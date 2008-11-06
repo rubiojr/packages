@@ -1,0 +1,20 @@
+--- httpd-2.2.3/modules/proxy/mod_proxy_http.c.proxyoride
++++ httpd-2.2.3/modules/proxy/mod_proxy_http.c
+@@ -1452,7 +1452,7 @@
+              * if we are overriding the errors, we can't put the content
+              * of the page into the brigade
+              */
+-            if (conf->error_override == 0 || ap_is_HTTP_SUCCESS(r->status)) {
++            if (conf->error_override == 0 || !ap_is_HTTP_ERROR(r->status)) {
+                 /* read the body, pass it to the output filters */
+                 apr_read_type_e mode = APR_NONBLOCK_READ;
+                 int finish = FALSE;
+@@ -1561,7 +1561,7 @@
+ 
+     if (conf->error_override) {
+         /* the code above this checks for 'OK' which is what the hook expects */
+-        if (ap_is_HTTP_SUCCESS(r->status))
++        if (!ap_is_HTTP_ERROR(r->status))
+             return OK;
+         else {
+             /* clear r->status for override error, otherwise ErrorDocument

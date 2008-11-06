@@ -1,0 +1,18 @@
+
+Author: rpluem
+Date: Mon Dec 24 03:45:22 2007
+New Revision: 606693
+
+URL: http://svn.apache.org/viewvc?rev=606693&view=rev
+
+--- httpd-2.2.3/modules/proxy/mod_proxy_ftp.c.prftpcset
++++ httpd-2.2.3/modules/proxy/mod_proxy_ftp.c
+@@ -1666,7 +1666,7 @@ static int proxy_ftp_handler(request_rec
+ 
+     /* set content-type */
+     if (dirlisting) {
+-        ap_set_content_type(r, "text/html");
++        ap_set_content_type(r, "text/html; charset=ISO-8859-1");
+     }
+     else {
+         if (r->content_type) {

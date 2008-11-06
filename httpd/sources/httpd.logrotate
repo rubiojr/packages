@@ -1,0 +1,8 @@
+/var/log/httpd/*log {
+    missingok
+    compress
+    daily
+    dateext
+    copytruncate
+    notifempty
+}
