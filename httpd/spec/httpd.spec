@@ -6,8 +6,8 @@
 
 Summary: Apache HTTP Server
 Name: httpd
-Version: 2.2.10
-Release: 1.nx
+Version: 2.2.11
+Release: 1.csic
 URL: http://httpd.apache.org/
 Packager: Sergio Rubio <sergio@rubio.name>
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.gz
@@ -481,7 +481,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/httpd/build/*.sh
 
 %changelog
-* Thu Nov 7 2008 Sergio Rubio <jorton@redhat.com> 2.2.10-1nx
+* Mon May 18 2009 Sergio Rubio <sergio@rubio.name> 2.2.10-1csic
+- updated to 2.2.11
+
+* Thu Nov 7 2008 Sergio Rubio <sergio@rubio.name> 2.2.10-1nx
 - updated to 2.2.10
 
 * Wed Nov 29 2006 Joe Orton <jorton@redhat.com> 2.2.3-6.el5
